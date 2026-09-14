@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-print_banner() {
+generate_banner() {
     if command -v figlet >/dev/null 2>&1; then
         figlet "Ondrya"
         return
@@ -22,6 +22,34 @@ print_banner() {
  \___/ |_| |_|\__,_||_|    \__, | \__,_|
                             |___/
 EOF
+}
+
+# Center a block of text (read from stdin) horizontally based on the
+# current terminal width. Falls back to 80 cols when not attached to
+# a tty (e.g. run non-interactively) or when tput is unavailable.
+center_text() {
+    local term_width
+    term_width=$(tput cols 2>/dev/null) || term_width=80
+    [[ "$term_width" =~ ^[0-9]+$ ]] || term_width=80
+
+    local lines=()
+    local line
+    local maxlen=0
+    while IFS= read -r line; do
+        lines+=("$line")
+        (( ${#line} > maxlen )) && maxlen=${#line}
+    done
+
+    local pad=$(( (term_width - maxlen) / 2 ))
+    (( pad < 0 )) && pad=0
+
+    for line in "${lines[@]}"; do
+        printf '%*s%s\n' "$pad" "" "$line"
+    done
+}
+
+print_banner() {
+    generate_banner | center_text
 }
 
 # Interfaces to exclude: loopback plus anything Docker creates
