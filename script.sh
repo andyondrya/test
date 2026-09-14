@@ -56,12 +56,46 @@ print_interfaces() {
     done
 }
 
+# Filesystem types to exclude from disk report - pseudo/virtual mounts
+# that don't represent real disk usage (tmpfs, proc/sys, overlay layers
+# used by Docker/containerd, squashfs snap mounts, etc).
+EXCLUDE_FSTYPE_REGEX='^(tmpfs|devtmpfs|overlay|squashfs|proc|sysfs|cgroup2?|devpts|mqueue|fuse.*|rpc_pipefs|tracefs|debugfs|configfs|autofs|nsfs|binfmt_misc)$'
+
+print_disks() {
+    local fs type size used avail pcent mount
+    # -T = include filesystem type column
+    while read -r fs type size used avail pcent mount; do
+        [[ "$fs" == "Filesystem" ]] && continue          # header row
+        [[ "$type" =~ $EXCLUDE_FSTYPE_REGEX ]] && continue
+        # skip Docker's internal overlay mounts by path too, in case
+        # they report as a real fstype (e.g. ext4 on a loop device)
+        [[ "$mount" == /var/lib/docker* ]] && continue
+        printf '  %-20s %-6s %6s used of %-6s (%s) -> %s\n' \
+            "$fs" "$type" "$used" "$size" "$pcent" "$mount"
+    done < <(df -hT --output=source,fstype,size,used,avail,pcent,target 2>/dev/null \
+              || df -hT)
+}
+
+print_memory() {
+    # `free -h` line 2 = Mem: total used free shared buff/cache available
+    local total used free_ shared cache avail
+    read -r _ total used free_ shared cache avail < <(free -h | awk '/^Mem:/{print}')
+    printf '  Total: %-8s Used: %-8s Available: %-8s (free: %s)\n' \
+        "$total" "$used" "$avail" "$free_"
+}
+
 main() {
     print_banner
     echo
     echo "Hostname: $(hostname)"
     echo "Interfaces:"
     print_interfaces
+    echo
+    echo "Disks:"
+    print_disks
+    echo
+    echo "Memory:"
+    print_memory
     echo
 }
 
